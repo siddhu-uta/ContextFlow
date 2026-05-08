@@ -308,6 +308,22 @@ services:
     profiles:
       - full
 
+  frontend:
+    build: ./frontend
+    container_name: contextflow-frontend
+    ports:
+      - "3001:80"
+    depends_on:
+      api-gateway:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:80/"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    profiles:
+      - full
+
 volumes:
   postgres_data:
   redis_data:
