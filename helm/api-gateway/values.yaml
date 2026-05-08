@@ -1,0 +1,51 @@
+replicaCount: 2
+
+image:
+  repository: contextflow/api-gateway
+  tag: latest
+  pullPolicy: IfNotPresent
+
+service:
+  type: LoadBalancer  # Public entry point
+  port: 8080
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    cpu: 1000m
+    memory: 1Gi
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 6
+  targetCPUUtilizationPercentage: 70
+
+env:
+  SPRING_DATA_REDIS_HOST: redis
+  GATEWAY_AUTH_SERVICE_URL: http://auth-service:8081
+  GATEWAY_INGESTION_SERVICE_URL: http://ingestion-service:8082
+  GATEWAY_QUERY_SERVICE_URL: http://query-service:8084
+  OTEL_SERVICE_NAME: api-gateway
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4317
+  OTEL_METRICS_EXPORTER: none
+  OTEL_LOGS_EXPORTER: none
+
+secrets:
+  JWT_SECRET: ""
+
+livenessProbe:
+  httpGet:
+    path: /actuator/health/liveness
+    port: 8080
+  initialDelaySeconds: 30
+  periodSeconds: 10
+
+readinessProbe:
+  httpGet:
+    path: /actuator/health/readiness
+    port: 8080
+  initialDelaySeconds: 20
+  periodSeconds: 5

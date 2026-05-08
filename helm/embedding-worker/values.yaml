@@ -1,0 +1,55 @@
+replicaCount: 1  # Scaled by KEDA based on Kafka lag
+
+image:
+  repository: contextflow/embedding-worker
+  tag: latest
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 8083
+
+resources:
+  requests:
+    cpu: 500m
+    memory: 2Gi   # sentence-transformers model needs ~400MB
+  limits:
+    cpu: 2000m
+    memory: 4Gi
+
+# KEDA autoscaling — scales on Kafka consumer lag instead of CPU
+# See templates/scaledobject.yaml
+keda:
+  enabled: true
+  minReplicaCount: 1
+  maxReplicaCount: 5
+  lagThreshold: "50"   # Scale up when lag > 50 messages per partition
+  bootstrapServers: kafka:9094
+  consumerGroup: embedding-worker-group
+  topic: document.uploaded
+
+env:
+  KAFKA_BOOTSTRAP_SERVERS: kafka:9094
+  DB_HOST: postgres
+  OTEL_SERVICE_NAME: embedding-worker
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4317
+  OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+
+secrets:
+  DB_PASSWORD: ""
+  AWS_ACCESS_KEY_ID: ""
+  AWS_SECRET_ACCESS_KEY: ""
+
+livenessProbe:
+  httpGet:
+    path: /health
+    port: 8083
+  initialDelaySeconds: 90  # model load time
+  periodSeconds: 15
+
+readinessProbe:
+  httpGet:
+    path: /ready
+    port: 8083
+  initialDelaySeconds: 60
+  periodSeconds: 10

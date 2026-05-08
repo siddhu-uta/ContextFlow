@@ -1,0 +1,99 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: api-gateway
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      timeout: 2000ms
+  cloud:
+    gateway:
+      # Strip X-Forwarded-* duplicates that can appear behind proxies
+      default-filters:
+        - DedupeResponseHeader=Access-Control-Allow-Credentials Access-Control-Allow-Origin
+      globalcors:
+        add-to-simple-url-handler-mapping: true
+        cors-configurations:
+          '[/**]':
+            allowedOriginPatterns: "*"
+            allowedMethods: "GET,POST,PUT,DELETE,OPTIONS"
+            allowedHeaders: "*"
+            allowCredentials: true
+      routes:
+
+        # ── Auth Service (public) ──────────────────────────────────────────────
+        # register / login / refresh bypass JWT filter (whitelisted in JwtGlobalFilter)
+        # Rate-limited per IP so credential stuffing is bounded
+        - id: auth-public
+          uri: ${gateway.auth-service-url}
+          predicates:
+            - Path=/api/v1/auth/**
+          filters:
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenish-rate: 10
+                redis-rate-limiter.burst-capacity: 30
+                key-resolver: "#{@ipKeyResolver}"
+
+        # ── Tenant Management (authenticated, ADMIN-only enforced by auth-service) ──
+        - id: tenant-management
+          uri: ${gateway.auth-service-url}
+          predicates:
+            - Path=/api/v1/tenants/**
+          filters:
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenish-rate: 17
+                redis-rate-limiter.burst-capacity: 100
+                key-resolver: "#{@tenantKeyResolver}"
+
+        # ── Ingestion Service ─────────────────────────────────────────────────
+        # File uploads can be large; higher burst allowed
+        - id: ingestion
+          uri: ${gateway.ingestion-service-url}
+          predicates:
+            - Path=/api/v1/documents/**
+          filters:
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenish-rate: 17
+                redis-rate-limiter.burst-capacity: 100
+                key-resolver: "#{@tenantKeyResolver}"
+
+        # ── Query Service ─────────────────────────────────────────────────────
+        # LLM calls are expensive — tighter rate limit per tenant
+        - id: query
+          uri: ${gateway.query-service-url}
+          predicates:
+            - Path=/api/v1/query
+          filters:
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenish-rate: 2
+                redis-rate-limiter.burst-capacity: 10
+                key-resolver: "#{@tenantKeyResolver}"
+
+gateway:
+  jwt-secret: ${JWT_SECRET:contextflow-dev-secret-key-must-be-at-least-32-chars-long!!}
+  auth-service-url: http://localhost:8081
+  ingestion-service-url: http://localhost:8082
+  query-service-url: http://localhost:8084
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,gateway,prometheus
+  endpoint:
+    health:
+      show-details: always
+      probes:
+        enabled: true
+
+logging:
+  level:
+    org.springframework.cloud.gateway: INFO
+    com.contextflow: DEBUG

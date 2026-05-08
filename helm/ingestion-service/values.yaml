@@ -1,0 +1,53 @@
+replicaCount: 2
+
+image:
+  repository: contextflow/ingestion-service
+  tag: latest
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 8082
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    cpu: 1000m
+    memory: 1Gi
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 8
+  targetCPUUtilizationPercentage: 70
+
+env:
+  SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/contextflow
+  SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9094
+  S3_ENDPOINT_URL: ""  # Empty in prod — uses real AWS S3
+  S3_BUCKET_NAME: contextflow-documents
+  OTEL_SERVICE_NAME: ingestion-service
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4317
+  OTEL_METRICS_EXPORTER: none
+  OTEL_LOGS_EXPORTER: none
+
+secrets:
+  JWT_SECRET: ""
+  AWS_ACCESS_KEY_ID: ""
+  AWS_SECRET_ACCESS_KEY: ""
+
+livenessProbe:
+  httpGet:
+    path: /actuator/health/liveness
+    port: 8082
+  initialDelaySeconds: 45
+  periodSeconds: 10
+
+readinessProbe:
+  httpGet:
+    path: /actuator/health/readiness
+    port: 8082
+  initialDelaySeconds: 30
+  periodSeconds: 5

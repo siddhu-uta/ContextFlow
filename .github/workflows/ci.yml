@@ -1,0 +1,179 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REGISTRY: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com
+
+jobs:
+  # ── Java Services ────────────────────────────────────────────────────────────
+  test-java:
+    name: Test ${{ matrix.service }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [auth-service, ingestion-service, query-service, api-gateway]
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: contextflow_test
+          POSTGRES_USER: contextflow
+          POSTGRES_PASSWORD: contextflow
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U contextflow"
+          --health-interval 10s --health-timeout 5s --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s --health-timeout 5s --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - name: Run tests
+        run: mvn -pl ${{ matrix.service }} -am test -q
+        env:
+          SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/contextflow_test
+          SPRING_DATA_REDIS_HOST: localhost
+          JWT_SECRET: test-secret-key-for-ci-must-be-at-least-32-chars!!
+
+  # ── Python Embedding Worker ───────────────────────────────────────────────
+  test-python:
+    name: Test embedding-worker
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: embedding-worker/requirements.txt
+
+      - name: Install dependencies
+        working-directory: embedding-worker
+        run: pip install -r requirements.txt pytest pytest-asyncio httpx
+
+      - name: Lint
+        working-directory: embedding-worker
+        run: |
+          pip install ruff
+          ruff check .
+
+      - name: Run tests
+        working-directory: embedding-worker
+        run: pytest tests/ -v --tb=short
+        env:
+          KAFKA_BOOTSTRAP_SERVERS: localhost:9092
+          DB_HOST: localhost
+          S3_ENDPOINT_URL: http://localhost:4566
+
+  # ── Docker Build + Push (main only) ──────────────────────────────────────
+  build-push:
+    name: Build & Push ${{ matrix.service }}
+    runs-on: ubuntu-latest
+    needs: [test-java, test-python]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    strategy:
+      matrix:
+        include:
+          - service: auth-service
+            dockerfile: auth-service/Dockerfile
+          - service: ingestion-service
+            dockerfile: ingestion-service/Dockerfile
+          - service: query-service
+            dockerfile: query-service/Dockerfile
+          - service: api-gateway
+            dockerfile: api-gateway/Dockerfile
+          - service: embedding-worker
+            dockerfile: embedding-worker/Dockerfile
+            context: embedding-worker
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: ${{ matrix.context || '.' }}
+          file: ${{ matrix.dockerfile }}
+          push: true
+          tags: |
+            ${{ steps.login-ecr.outputs.registry }}/contextflow/${{ matrix.service }}:${{ github.sha }}
+            ${{ steps.login-ecr.outputs.registry }}/contextflow/${{ matrix.service }}:latest
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
+
+  # ── Deploy to Kubernetes ──────────────────────────────────────────────────
+  deploy:
+    name: Deploy to Kubernetes
+    runs-on: ubuntu-latest
+    needs: build-push
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment: production
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.15.1
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Update kubeconfig
+        run: aws eks update-kubeconfig --name contextflow --region ${{ env.AWS_REGION }}
+
+      - name: Deploy each service
+        env:
+          IMAGE_TAG: ${{ github.sha }}
+          ECR: ${{ steps.login-ecr.outputs.registry }}
+        run: |
+          for svc in auth-service ingestion-service query-service api-gateway embedding-worker; do
+            helm upgrade --install $svc helm/$svc \
+              --namespace contextflow \
+              --create-namespace \
+              --set image.repository=$ECR/contextflow/$svc \
+              --set image.tag=$IMAGE_TAG \
+              --set image.pullPolicy=IfNotPresent \
+              --wait --timeout 5m
+          done

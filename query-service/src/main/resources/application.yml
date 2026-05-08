@@ -1,0 +1,46 @@
+server:
+  port: 8084
+
+spring:
+  application:
+    name: query-service
+  datasource:
+    url: jdbc:postgresql://localhost:5432/contextflow
+    username: contextflow
+    password: contextflow
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+  kafka:
+    bootstrap-servers: localhost:9092
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      timeout: 2000ms
+
+query:
+  openai-api-key: ${OPENAI_API_KEY:}
+  openai-model: gpt-4o-mini
+  embedding-worker-url: http://localhost:8083
+  top-k: 5
+  cache-ttl-minutes: 60
+  llm-mode: ${LLM_MODE:mock}   # Set to "openai" with OPENAI_API_KEY for real LLM
+  jwt-secret: ${JWT_SECRET:contextflow-dev-secret-key-must-be-at-least-32-chars-long!!}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      show-details: when-authorized
+      probes:
+        enabled: true
+
+logging:
+  level:
+    com.contextflow: DEBUG
+    org.springframework.security: INFO

@@ -1,0 +1,30 @@
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+pydantic-settings==2.5.2
+
+# Kafka
+kafka-python==2.0.2
+
+# Embedding model
+sentence-transformers==3.1.1
+torch==2.4.1
+numpy==1.26.4
+
+# Database
+psycopg2-binary==2.9.9
+pgvector==0.3.2
+
+# S3
+boto3==1.35.0
+
+# Document parsing
+pypdf==4.3.1
+python-docx==1.1.2
+
+# Observability — traces (OTLP → Jaeger) + Prometheus metrics endpoint
+opentelemetry-api==1.25.0
+opentelemetry-sdk==1.25.0
+opentelemetry-instrumentation-fastapi==0.46b0
+opentelemetry-exporter-otlp-proto-grpc==1.25.0
+prometheus-client==0.20.0
+prometheus-fastapi-instrumentator==7.0.0

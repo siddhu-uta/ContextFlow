@@ -1,0 +1,24 @@
+{{- if .Values.keda.enabled }}
+# KEDA ScaledObject — scales embedding-worker pods based on Kafka consumer lag.
+# Standard HPA can't react to Kafka lag; KEDA bridges the gap via the Kafka scaler.
+# Requires KEDA v2+ installed in the cluster: https://keda.sh/docs/deploy/
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: {{ .Release.Name }}-keda
+spec:
+  scaleTargetRef:
+    name: {{ .Release.Name }}
+  minReplicaCount: {{ .Values.keda.minReplicaCount }}
+  maxReplicaCount: {{ .Values.keda.maxReplicaCount }}
+  pollingInterval: 15
+  cooldownPeriod: 60
+  triggers:
+    - type: kafka
+      metadata:
+        bootstrapServers: {{ .Values.keda.bootstrapServers }}
+        consumerGroup: {{ .Values.keda.consumerGroup }}
+        topic: {{ .Values.keda.topic }}
+        lagThreshold: {{ .Values.keda.lagThreshold | quote }}
+        offsetResetPolicy: latest
+{{- end }}

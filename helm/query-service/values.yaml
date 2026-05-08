@@ -1,0 +1,53 @@
+replicaCount: 2
+
+image:
+  repository: contextflow/query-service
+  tag: latest
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 8084
+
+resources:
+  requests:
+    cpu: 500m
+    memory: 1Gi
+  limits:
+    cpu: 2000m
+    memory: 2Gi
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 60  # LLM calls are CPU-heavy; scale earlier
+
+env:
+  SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/contextflow
+  SPRING_DATA_REDIS_HOST: redis
+  SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9094
+  QUERY_EMBEDDING_WORKER_URL: http://embedding-worker:8083
+  LLM_MODE: openai
+  OTEL_SERVICE_NAME: query-service
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4317
+  OTEL_METRICS_EXPORTER: none
+  OTEL_LOGS_EXPORTER: none
+
+secrets:
+  JWT_SECRET: ""
+  OPENAI_API_KEY: ""
+
+livenessProbe:
+  httpGet:
+    path: /actuator/health/liveness
+    port: 8084
+  initialDelaySeconds: 45
+  periodSeconds: 10
+
+readinessProbe:
+  httpGet:
+    path: /actuator/health/readiness
+    port: 8084
+  initialDelaySeconds: 30
+  periodSeconds: 5

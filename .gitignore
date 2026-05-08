@@ -1,0 +1,16 @@
+**/target/
+*.class
+*.jar
+*.war
+.idea/
+*.iml
+.vscode/
+.env
+.DS_Store
+__pycache__/
+*.pyc
+*.egg-info/
+dist/
+venv/
+.venv/
+node_modules/

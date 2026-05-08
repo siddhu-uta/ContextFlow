@@ -1,0 +1,6 @@
+apiVersion: v2
+name: embedding-worker
+description: ContextFlow Embedding Worker — Kafka consumer, text chunking, vector storage
+type: application
+version: 0.1.0
+appVersion: "1.0.0-SNAPSHOT"

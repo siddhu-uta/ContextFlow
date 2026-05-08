@@ -1,0 +1,53 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: contextflow-local
+
+scrape_configs:
+
+  # ── Java Services ────────────────────────────────────────────────────────────
+  # Spring Boot Actuator exposes /actuator/prometheus when micrometer-registry-prometheus
+  # is on the classpath. All services expose JVM, HTTP, Hikari, Kafka metrics.
+
+  - job_name: auth-service
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ['auth-service:8081']
+        labels:
+          service: auth-service
+
+  - job_name: ingestion-service
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ['ingestion-service:8082']
+        labels:
+          service: ingestion-service
+
+  - job_name: query-service
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ['query-service:8084']
+        labels:
+          service: query-service
+
+  - job_name: api-gateway
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ['api-gateway:8080']
+        labels:
+          service: api-gateway
+
+  # ── Python Embedding Worker ───────────────────────────────────────────────
+  # prometheus_client exposes /metrics via PrometheusInstrumentator
+  - job_name: embedding-worker
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['embedding-worker:8083']
+        labels:
+          service: embedding-worker
+
+  # ── Self-monitoring ───────────────────────────────────────────────────────
+  - job_name: prometheus
+    static_configs:
+      - targets: ['localhost:9090']
