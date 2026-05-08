@@ -1,3 +1,6 @@
+-- Include public in search_path so the vector type (installed there) is visible.
+SET search_path TO ingestion, public;
+
 -- document_chunks stores each text chunk and its vector embedding.
 -- embedding vector(384) matches all-MiniLM-L6-v2 output dimensions.
 -- The HNSW index enables sub-second cosine similarity search at 10K+ doc scale.
