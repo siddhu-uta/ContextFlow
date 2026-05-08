@@ -6,8 +6,8 @@ spring:
     name: ingestion-service
   datasource:
     url: jdbc:postgresql://localhost:5432/contextflow?currentSchema=ingestion
-    username: contextflow
-    password: contextflow
+    username: ${DB_USERNAME:contextflow}
+    password: ${DB_PASSWORD:contextflow}
     driver-class-name: org.postgresql.Driver
     hikari:
       maximum-pool-size: 10
@@ -38,8 +38,8 @@ ingestion:
     endpoint: http://localhost:4566
     bucket: contextflow-documents
     region: us-east-1
-    access-key: test
-    secret-key: test
+    access-key: ${INGESTION_S3_ACCESS_KEY:test}
+    secret-key: ${INGESTION_S3_SECRET_KEY:test}
   jwt:
     secret: ${JWT_SECRET:contextflow-dev-secret-key-must-be-at-least-32-chars-long!!}
     issuer: contextflow

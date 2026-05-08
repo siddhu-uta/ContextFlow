@@ -1,5 +1,7 @@
 package com.contextflow.ingestion.service;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.time.Instant;
 import java.util.Set;
 import java.util.UUID;
@@ -37,18 +39,25 @@ public class DocumentService {
             "text/plain"
     );
 
+    // Magic bytes: PDF = %PDF, DOCX/ZIP = PK\x03\x04
+    private static final byte[] PDF_MAGIC  = { 0x25, 0x50, 0x44, 0x46 }; // %PDF
+    private static final byte[] DOCX_MAGIC = { 0x50, 0x4B, 0x03, 0x04 }; // PK..
+
     private final DocumentRepository documentRepository;
     private final S3StorageService s3StorageService;
     private final KafkaTemplate<String, DocumentUploadedEvent> kafkaTemplate;
     private final IngestionProperties properties;
 
     @Transactional
+    @SuppressWarnings("null") // UUID.toString() and config values are non-null; IDE can't prove it
     public UploadResponse upload(MultipartFile file, UUID tenantId, UUID uploadedBy) {
         String contentType = file.getContentType();
         if (contentType == null || !ALLOWED_CONTENT_TYPES.contains(contentType)) {
             throw new UnsupportedFileTypeException(
                 "Unsupported file type: %s. Allowed: PDF, DOCX, TXT".formatted(contentType));
         }
+
+        verifyMagicBytes(file, contentType);
 
         UUID documentId = UUID.randomUUID();
         UUID jobId = UUID.randomUUID();
@@ -104,5 +113,33 @@ public class DocumentService {
 
         return documentRepository.findAllByTenantId(tenantId, pageable)
                 .map(DocumentListResponse::from);
+    }
+
+    private void verifyMagicBytes(MultipartFile file, String contentType) {
+        try (InputStream in = file.getInputStream()) {
+            byte[] header = in.readNBytes(4);
+            boolean valid = switch (contentType) {
+                case "application/pdf" -> startsWith(header, PDF_MAGIC);
+                case "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                        -> startsWith(header, DOCX_MAGIC);
+                // Plain text has no magic bytes — accept any non-empty content
+                case "text/plain" -> header.length > 0;
+                default -> false;
+            };
+            if (!valid) {
+                throw new UnsupportedFileTypeException(
+                    "File content does not match declared type: " + contentType);
+            }
+        } catch (IOException e) {
+            throw new UnsupportedFileTypeException("Could not read file for type verification");
+        }
+    }
+
+    private static boolean startsWith(byte[] data, byte[] prefix) {
+        if (data.length < prefix.length) return false;
+        for (int i = 0; i < prefix.length; i++) {
+            if (data[i] != prefix[i]) return false;
+        }
+        return true;
     }
 }

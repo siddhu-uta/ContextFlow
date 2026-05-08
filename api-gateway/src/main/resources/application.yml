@@ -6,21 +6,30 @@ spring:
     name: api-gateway
   data:
     redis:
-      host: localhost
-      port: 6379
+      host: ${SPRING_DATA_REDIS_HOST:localhost}
+      port: ${SPRING_DATA_REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
       timeout: 2000ms
   cloud:
     gateway:
       # Strip X-Forwarded-* duplicates that can appear behind proxies
       default-filters:
         - DedupeResponseHeader=Access-Control-Allow-Credentials Access-Control-Allow-Origin
+        - AddResponseHeader=X-Content-Type-Options, nosniff
+        - AddResponseHeader=X-Frame-Options, DENY
+        - AddResponseHeader=Referrer-Policy, strict-origin-when-cross-origin
+        # X-XSS-Protection is deprecated in modern browsers; CSP is the replacement.
+        # HSTS should be added at the TLS termination layer (load balancer / ingress), not here.
       globalcors:
         add-to-simple-url-handler-mapping: true
         cors-configurations:
           '[/**]':
-            allowedOriginPatterns: "*"
+            # Wildcard origin cannot be used with allowCredentials: true (reflects request Origin,
+            # letting any site make credentialed cross-origin requests).
+            # Set CORS_ALLOWED_ORIGINS in production to your actual frontend domain(s).
+            allowedOriginPatterns: "${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:5173}"
             allowedMethods: "GET,POST,PUT,DELETE,OPTIONS"
-            allowedHeaders: "*"
+            allowedHeaders: "Authorization,Content-Type,Accept"
             allowCredentials: true
       routes:
 
@@ -89,7 +98,7 @@ management:
         include: health,info,gateway,prometheus
   endpoint:
     health:
-      show-details: always
+      show-details: when-authorized
       probes:
         enabled: true
 

@@ -109,7 +109,10 @@ public class QueryService {
         } catch (Exception e) {
             log.error("Query failed for tenant {}: {}", tenantId, e.getMessage(), e);
             try {
-                emitter.send(SseEmitter.event().name("error").data(Map.of("message", e.getMessage())));
+                // Do not send the raw exception message to the client — it may contain
+                // internal details (SQL, stack frames). Log the real cause server-side.
+                emitter.send(SseEmitter.event().name("error")
+                        .data(Map.of("message", "An error occurred processing your request.")));
             } catch (IOException ignored) {}
             emitter.completeWithError(e);
         }

@@ -15,37 +15,53 @@ import com.contextflow.auth.dto.RegisterTenantRequest;
 import com.contextflow.auth.dto.TokenResponse;
 import com.contextflow.auth.service.AuthService;
 
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 @RestController
 @RequestMapping("/api/v1/auth")
 @RequiredArgsConstructor
+@Slf4j
 public class AuthController {
 
     private final AuthService authService;
 
     @PostMapping("/register")
-    public ResponseEntity<TokenResponse> register(@Valid @RequestBody RegisterTenantRequest request) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(authService.register(request));
+    public ResponseEntity<TokenResponse> register(@Valid @RequestBody RegisterTenantRequest request,
+                                                   HttpServletRequest httpRequest) {
+        TokenResponse response = authService.register(request);
+        log.info("AUDIT register org={} email={} ip={}",
+                request.slug(), request.adminEmail(), httpRequest.getRemoteAddr());
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
     @PostMapping("/login")
-    public ResponseEntity<TokenResponse> login(@Valid @RequestBody LoginRequest request) {
-        return ResponseEntity.ok(authService.login(request));
+    public ResponseEntity<TokenResponse> login(@Valid @RequestBody LoginRequest request,
+                                                HttpServletRequest httpRequest) {
+        TokenResponse response = authService.login(request);
+        log.info("AUDIT login email={} ip={}", request.email(), httpRequest.getRemoteAddr());
+        return ResponseEntity.ok(response);
     }
 
     @PostMapping("/refresh")
-    public ResponseEntity<TokenResponse> refresh(@Valid @RequestBody RefreshTokenRequest request) {
-        return ResponseEntity.ok(authService.refresh(request.refreshToken()));
+    public ResponseEntity<TokenResponse> refresh(@Valid @RequestBody RefreshTokenRequest request,
+                                                  HttpServletRequest httpRequest) {
+        TokenResponse response = authService.refresh(request.refreshToken());
+        log.info("AUDIT token_refresh ip={}", httpRequest.getRemoteAddr());
+        return ResponseEntity.ok(response);
     }
 
     @PostMapping("/logout")
     public ResponseEntity<Void> logout(@RequestHeader("Authorization") String authHeader,
-                                        Authentication authentication) {
+                                        Authentication authentication,
+                                        HttpServletRequest httpRequest) {
         if (authHeader != null && authHeader.startsWith("Bearer ")) {
             authService.logout(authHeader.substring(7));
         }
+        String principal = authentication != null ? authentication.getName() : "anonymous";
+        log.info("AUDIT logout principal={} ip={}", principal, httpRequest.getRemoteAddr());
         return ResponseEntity.noContent().build();
     }
 }
