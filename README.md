@@ -149,7 +149,7 @@ docker compose --profile full up -d
 ## Quick Demo
 
 ```bash
-BASE=http://localhost:8080
+BASE=http://localhost:8090
 
 # 1. Register a tenant (creates org + admin user)
 curl -s -X POST $BASE/api/v1/auth/register \

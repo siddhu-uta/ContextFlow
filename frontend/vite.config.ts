@@ -9,7 +9,7 @@ export default defineConfig({
       // All /api calls in dev are forwarded to the API gateway at :8080.
       // This sidesteps CORS entirely during local development.
       '/api': {
-        target: 'http://localhost:8080',
+        target: 'http://localhost:8090',
         changeOrigin: true,
       },
     },

@@ -285,7 +285,7 @@ services:
       dockerfile: api-gateway/Dockerfile
     container_name: contextflow-api-gateway
     ports:
-      - "8080:8080"
+      - "8090:8090"
     environment:
       - SPRING_DATA_REDIS_HOST=redis
       - REDIS_PASSWORD=${REDIS_PASSWORD:-}
@@ -301,7 +301,7 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8090/actuator/health"]
       interval: 15s
       timeout: 5s
       retries: 5
